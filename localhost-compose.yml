@@ -1,0 +1,20 @@
+services:
+
+  adelantado:
+    working_dir: /home/goforbroke/GolandProjects/adelantado
+    build:
+#      dockerfile: ./.build/Dockerfile
+      shell: |
+        go generate ./...
+        go build -o adelantado ./main.go
+        go test -race ./...
+    command: ./adelantado
+
+  go-profiling-samples--07_scheduler--sample_01:
+    working_dir: /home/goforbroke/golang/src/github.com/goforbroke1006/go-profiling-samples
+    build:
+      shell: |
+        cd ./07_scheduler/sample_01/
+        go build -o ./app ./
+        cd -
+    command: ./app
