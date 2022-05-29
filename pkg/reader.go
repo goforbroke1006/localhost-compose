@@ -23,6 +23,9 @@ func (sr *stdReader) ReadString() (length int, text string, err error) {
 	if err != nil {
 		return 0, "", err
 	}
+	if length <= sr.behind {
+		return 0, "", err
+	}
 
 	realReadLength := length - sr.behind
 
