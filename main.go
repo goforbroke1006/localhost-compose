@@ -1,95 +1,134 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"sync"
 
 	"gopkg.in/yaml.v3"
+
+	"localhost-compose/domain"
+	"localhost-compose/pkg"
 )
 
 func main() {
+	logger := pkg.NewLogger()
+
 	composeFilename := "localhost-compose.yml"
 
 	if len(os.Args) > 1 {
 		composeFilename = os.Args[1]
 	}
 
+	path, err := os.Getwd()
+	if err != nil {
+		log.Println(err)
+	}
+	fmt.Println(path)
+
 	composeBytes, err := os.ReadFile(composeFilename)
 	if err != nil {
 		panic(err)
 	}
-	var schema ComposeSchema
+	var schema domain.ComposeSchema
 	if err = yaml.Unmarshal(composeBytes, &schema); err != nil {
 		panic(err)
 	}
-
-	//fmt.Println(schema)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	servicesWg := sync.WaitGroup{}
 
 	for svcName, svcSpec := range schema.Services {
 		servicesWg.Add(1)
-		go func(svcName string, svcSpec ServiceSpec) {
+		go func(svcName string, svcSpec domain.ServiceSpec) {
+			//{
+			//	buildCmd := exec.Command("/bin/sh", "-c", svcSpec.Build.Shell)
+			//	buildCmd.Stdout = os.Stdout
+			//	if err := buildCmd.Run(); err != nil {
+			//		fmt.Println("ERROR:", err.Error(), ":", "build", svcName)
+			//		return
+			//	}
+			//
+			//	fmt.Println("INFO:", svcName, "build exit", buildCmd.ProcessState.ExitCode())
+			//}
+
+			var currentWorkDir string
+			if filepath.IsAbs(svcSpec.WorkingDir) {
+				currentWorkDir = svcSpec.WorkingDir
+			} else {
+				currentWorkDir = filepath.Join(path, svcSpec.WorkingDir)
+			}
+
 			{
-				buildCmd := exec.Command("/bin/sh", "-c", svcSpec.Build.Shell)
-				buildCmd.Stdout = os.Stdout
-				if err := buildCmd.Run(); err != nil {
-					fmt.Println("ERROR:", err.Error(), ":", "build", svcName)
-					return
+				commandCmd := exec.CommandContext(ctx, "/bin/bash", "-c", svcSpec.Command)
+				commandCmd.Dir = currentWorkDir
+
+				stdout := new(bytes.Buffer)
+				stderr := new(bytes.Buffer)
+
+				commandCmd.Stdout = stdout // standard output
+				commandCmd.Stderr = stderr // standard error
+
+				readOut := pkg.NewBashOutputReader(stdout)
+				readErr := pkg.NewBashOutputReader(stderr)
+
+				if err = commandCmd.Start(); err != nil {
+					panic(err)
 				}
-				//output, err := buildCmd.Output()
-				//if err != nil {
-				//	fmt.Println("ERROR:", err.Error(), ":", "build", svcName)
-				//	return
-				//}
-				//fmt.Println("INFO:", svcName, "build output", string(output))
-				fmt.Println("INFO:", svcName, "build exit", buildCmd.ProcessState.ExitCode())
-			}
 
-			{
-				commandCmd := exec.CommandContext(ctx, "/bin/sh", "-c", svcSpec.Command)
-				//commandCmd := exec.Command("/bin/sh", "-c", svcSpec.Command)
-				commandCmd.Stdout = os.Stdout
 				go func() {
-					if err := commandCmd.Run(); err != nil {
-						fmt.Println("ERROR:", err.Error(), ":", svcName, svcSpec.Command)
+					for {
+						length, text, _ := readOut.ReadString()
+						if length == 0 {
+							continue
+						}
+
+						logger.Info(svcName, text)
+
 					}
-					fmt.Println("INFO:", svcName, "command exit", commandCmd.ProcessState.ExitCode())
 				}()
-				fmt.Println("INFO:", svcName, "running")
+				go func() {
+					for {
+						length, text, _ := readErr.ReadString()
+						if length == 0 {
+							continue
+						}
+
+						logger.Info(svcName, text)
+					}
+				}()
+
+				if err := commandCmd.Wait(); err != nil {
+					panic(err)
+				}
+
+				if commandCmd.ProcessState.ExitCode() == 0 {
+					logger.Infof(svcName, "exit code %d", commandCmd.ProcessState.ExitCode())
+				} else {
+					logger.Errorf(svcName, "exit code %d", commandCmd.ProcessState.ExitCode())
+				}
 			}
 
-			<-ctx.Done()
-			fmt.Println("INFO:", svcName, "stopping")
+			logger.Infof(svcName, "stopping")
 			servicesWg.Done()
 
 		}(svcName, svcSpec)
 	}
 
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt)
-	<-c
+	go func() {
+		c := make(chan os.Signal, 1)
+		signal.Notify(c, os.Interrupt)
+		<-c
+		cancel()
+		fmt.Println("Stopping all")
+	}()
 
-	fmt.Println("Stopping all")
-	cancel()
 	servicesWg.Wait()
-}
-
-type ComposeSchema struct {
-	Services map[string]ServiceSpec `yaml:"services"`
-}
-
-type ServiceSpec struct {
-	WorkingDir string    `yaml:"working_dir"`
-	Build      BuildSpec `yaml:"build"`
-	Command    string    `yaml:"command"`
-}
-
-type BuildSpec struct {
-	Shell string `yaml:"shell"`
+	cancel()
 }

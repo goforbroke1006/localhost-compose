@@ -1,20 +1,21 @@
 services:
 
-  adelantado:
-    working_dir: /home/goforbroke/GolandProjects/adelantado
-    build:
-#      dockerfile: ./.build/Dockerfile
-      shell: |
-        go generate ./...
-        go build -o adelantado ./main.go
-        go test -race ./...
-    command: ./adelantado
+  service-1:
+    working_dir: ./
+    command: |
+      echo "Hello World"
+      sleep 10
+      echo "Bye"
 
-  go-profiling-samples--07_scheduler--sample_01:
-    working_dir: /home/goforbroke/golang/src/github.com/goforbroke1006/go-profiling-samples
-    build:
-      shell: |
-        cd ./07_scheduler/sample_01/
-        go build -o ./app ./
-        cd -
-    command: ./app
+  service-2:
+    working_dir: ./
+    command: |
+      echo Wazzup; sleep 5
+      cd /
+      ls
+
+  service-http-server:
+    working_dir: ./
+    command: |
+      echo "Start server on http://127.0.0.1:8000/ in project directory"
+      python -m SimpleHTTPServer
