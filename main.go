@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -47,6 +48,10 @@ func main() {
 	for svcName, svcSpec := range schema.Services {
 		servicesWg.Add(1)
 		go func(svcName string, svcSpec domain.ServiceSpec) {
+			defer func() {
+				servicesWg.Done()
+			}()
+
 			//{
 			//	buildCmd := exec.Command("/bin/sh", "-c", svcSpec.Build.Shell)
 			//	buildCmd.Stdout = os.Stdout
@@ -82,41 +87,52 @@ func main() {
 					panic(err)
 				}
 
-				go func() {
+				go func(ctx context.Context) {
 					for {
-						length, text, _ := readOut.ReadString()
-						if length == 0 {
-							continue
+						select {
+						case <-ctx.Done():
+							break
+						default:
+							length, text, _ := readOut.ReadString()
+							if length == 0 {
+								continue
+							}
+							logger.Info(svcName, text)
 						}
-
-						logger.Info(svcName, text)
-
 					}
-				}()
+				}(ctx)
+
 				go func() {
 					for {
-						length, text, _ := readErr.ReadString()
-						if length == 0 {
-							continue
+						select {
+						case <-ctx.Done():
+							break
+						default:
+							length, text, _ := readErr.ReadString()
+							if length == 0 {
+								continue
+							}
+							logger.Info(svcName, text)
 						}
-
-						logger.Info(svcName, text)
 					}
 				}()
 
 				if err := commandCmd.Wait(); err != nil {
-					panic(err)
+					if err.Error() == "signal: interrupt" || err.Error() == "signal: killed" {
+						logger.Infof(svcName, "killed")
+						return
+					} else {
+						panic(err)
+					}
 				}
 
+				time.Sleep(time.Second)
 				if commandCmd.ProcessState.ExitCode() == 0 {
 					logger.Infof(svcName, "exit code %d", commandCmd.ProcessState.ExitCode())
 				} else {
 					logger.Errorf(svcName, "exit code %d", commandCmd.ProcessState.ExitCode())
 				}
 			}
-
-			logger.Infof(svcName, "stopping")
-			servicesWg.Done()
 
 		}(svcName, svcSpec)
 	}
