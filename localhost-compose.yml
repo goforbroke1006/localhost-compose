@@ -16,6 +16,14 @@ services:
 
   service-http-server:
     working_dir: ./
+    build:
+      shell: |
+        mkdir -p /tmp/service-http-server/
+        rm -f /tmp/service-http-server/*
+        cd /tmp/service-http-server/
+        echo "hello" > hello.html
+        echo "world" > world.html
     command: |
+      cd /tmp/service-http-server/
       echo "Start server on http://127.0.0.1:8000/ in project directory"
       python -m SimpleHTTPServer
