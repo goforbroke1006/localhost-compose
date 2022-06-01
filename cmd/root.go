@@ -2,12 +2,13 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/goforbroke1006/localhost-compose/domain"
-	"gopkg.in/yaml.v3"
 	"log"
 	"os"
 
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
+
+	"github.com/goforbroke1006/localhost-compose/domain"
 )
 
 var (
@@ -41,7 +42,7 @@ func Execute() {
 	}
 
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
