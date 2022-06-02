@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 
 	"github.com/goforbroke1006/localhost-compose/domain"
 	"github.com/goforbroke1006/localhost-compose/internal"
@@ -17,15 +18,36 @@ import (
 )
 
 func NewUpCmd() *cobra.Command {
+	var (
+		composeSchema     domain.ComposeSchema
+		composeWorkingDir string
+	)
+
 	return &cobra.Command{
 		Use: "up",
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			path, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			composeWorkingDir = path
+
+			composeBytes, err := os.ReadFile(composeFilename)
+			if err != nil {
+				return err
+			}
+			if err = yaml.Unmarshal(composeBytes, &composeSchema); err != nil {
+				return err
+			}
+			return nil
+		},
 		Run: func(cmd *cobra.Command, args []string) {
 			logger := pkg.NewLogger()
 
 			ctx, cancel := context.WithCancel(context.Background())
 			servicesWg := sync.WaitGroup{}
 
-			for svcName, svcSpec := range schema.Services {
+			for svcName, svcSpec := range composeSchema.Services {
 				servicesWg.Add(1)
 				go func(svcName string, svcSpec domain.ServiceSpec) {
 					defer func() {

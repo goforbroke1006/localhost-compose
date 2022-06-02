@@ -1,0 +1,33 @@
+services:
+
+  service-1:
+    working_dir: ./
+    build:
+      shell: |
+        echo "try to build service-1..."
+        sleep 5
+    command: |
+      echo "Hello World!!!"
+      sleep 10
+      echo "Bye"
+
+  service-2:
+    working_dir: ./
+    command: |
+      echo Wazzup; sleep 5
+      cd ./
+      ls
+
+  service-http-server:
+    working_dir: ./
+    build:
+      shell: |
+        mkdir -p /tmp/service-http-server/
+        rm -f /tmp/service-http-server/*
+        cd /tmp/service-http-server/
+        echo "hello" > hello.html
+        echo "world" > world.html
+    command: |
+      cd /tmp/service-http-server/
+      echo "Start server on http://127.0.0.1:8000/ in project directory"
+      python -m SimpleHTTPServer

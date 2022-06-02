@@ -2,10 +2,12 @@ package cmd
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 
 	"github.com/goforbroke1006/localhost-compose/domain"
 	"github.com/goforbroke1006/localhost-compose/internal"
@@ -13,14 +15,35 @@ import (
 )
 
 func NewBuildCmd() *cobra.Command {
+	var (
+		composeSchema     domain.ComposeSchema
+		composeWorkingDir string
+	)
+
 	return &cobra.Command{
 		Use: "build",
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			path, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			composeWorkingDir = path
+
+			composeBytes, err := os.ReadFile(composeFilename)
+			if err != nil {
+				return err
+			}
+			if err = yaml.Unmarshal(composeBytes, &composeSchema); err != nil {
+				return err
+			}
+			return nil
+		},
 		Run: func(cmd *cobra.Command, args []string) {
 			logger := pkg.NewLogger()
 
 			ctx := context.Background()
 
-			for svcName, svcSpec := range schema.Services {
+			for svcName, svcSpec := range composeSchema.Services {
 
 				if len(svcSpec.Build.Shell) == 0 {
 					logger.Infof(svcName, "skipped")
